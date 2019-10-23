@@ -1,0 +1,17 @@
+BasedOnStyle: LLVM
+AlignTrailingComments: true
+BreakBeforeBraces: Allman
+ColumnLimit: 0
+IndentWidth: 2
+KeepEmptyLinesAtTheStartOfBlocks: false
+AllowShortIfStatementsOnASingleLine: true
+ObjCSpaceAfterProperty: true
+ObjCSpaceBeforeProtocolList: true
+PointerBindsToType: false
+SortIncludes: false
+AlignConsecutiveAssignments: true
+AlignTrailingComments: true
+PointerAlignment: Left
+SpacesBeforeTrailingComments: 1
+TabWidth: 4
+UseTab: Never
