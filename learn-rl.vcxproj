@@ -154,6 +154,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="ConnectFour.h" />
+    <ClInclude Include="DecisionProcessWindow.h" />
     <ClInclude Include="imgui\imgui_memory_editor.h" />
     <ClInclude Include="imgui\misc\cpp\imgui_stdlib.h" />
     <ClInclude Include="json.hpp" />
@@ -166,6 +168,8 @@
     <ClInclude Include="TicTacToeWindow.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="ConnectFour.cpp" />
+    <ClCompile Include="DecisionProcessWindow.cpp" />
     <ClCompile Include="imgui\misc\cpp\imgui_stdlib.cpp" />
     <ClCompile Include="imgui\imgui.cpp" />
     <ClCompile Include="imgui\imgui_demo.cpp" />

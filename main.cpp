@@ -9,6 +9,7 @@
 #include <dinput.h>
 #include <tchar.h>
 #include "Menu.h"
+#include "IconsKenney.h"
 
 // Data
 static ID3D11Device* g_pd3dDevice                     = NULL;
@@ -75,6 +76,15 @@ int main(int, char**)
   //io.Fonts->AddFontFromFileTTF("../../misc/fonts/ProggyTiny.ttf", 10.0f);
   //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
   //IM_ASSERT(font != NULL);
+
+  io.Fonts->AddFontDefault();
+
+  // merge in icons from Font Awesome
+  static const ImWchar icons_ranges[] = { ICON_MIN_KI, ICON_MAX_KI, 0 };
+  ImFontConfig icons_config;
+  icons_config.MergeMode = true;
+  icons_config.PixelSnapH = true;
+  io.Fonts->AddFontFromFileTTF(FONT_ICON_FILE_NAME_KI, 13.0f, &icons_config, icons_ranges);
 
   // Our state
   bool show_demo_window    = true;
