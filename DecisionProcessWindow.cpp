@@ -100,6 +100,40 @@ enum class EDir
 
 static EDir s_policy[NUM_COLUMNS][NUM_ROWS];
 
+static EDir DeviateLeft(EDir dir)
+{
+  switch (dir)
+  {
+  case EDir::Up:
+    return EDir::Left;
+  case EDir::Down:
+    return EDir::Right;
+  case EDir::Left:
+    return EDir::Down;
+  case EDir::Right:
+    return EDir::Up;
+  default:
+    return EDir::Up;
+  }
+}
+
+static EDir DeviateRight(EDir dir)
+{
+  switch (dir)
+  {
+  case EDir::Up:
+    return EDir::Right;
+  case EDir::Down:
+    return EDir::Left;
+  case EDir::Left:
+    return EDir::Up;
+  case EDir::Right:
+    return EDir::Down;
+  default:
+    return EDir::Up;
+  }
+}
+
 static const char* GetDirText(EDir dir)
 {
   switch (dir)
@@ -158,10 +192,9 @@ static Pos GetMove(Pos pos, EDir dir)
   return newPos;
 }
 
-static float CalculateUtility(float u[NUM_COLUMNS][NUM_ROWS], Pos cur)
+static float CalculateUtility(const float u[NUM_COLUMNS][NUM_ROWS], Pos cur, EDir* out_dir = nullptr)
 {
   // Define utility using Bellman equation
-  float base = u[cur.x][cur.y];
   float max  = -FLT_MAX;
 
   Pos posUp    = GetMove(cur, EDir::Up);
@@ -174,7 +207,123 @@ static float CalculateUtility(float u[NUM_COLUMNS][NUM_ROWS], Pos cur)
   float left  = CHANCE_FORWARD * u[posLeft.x][posLeft.y] + CHANCE_DEVIATE_LEFT * u[posDown.x][posDown.y] + CHANCE_DEVIATE_RIGHT * u[posUp.x][posUp.y];
   float right = CHANCE_FORWARD * u[posRight.x][posRight.y] + CHANCE_DEVIATE_LEFT * u[posUp.x][posUp.y] + CHANCE_DEVIATE_RIGHT * u[posDown.x][posDown.y];
 
-  return std::max(max, std::max(up, std::max(down, std::max(left, right))));
+  //return std::max(max, std::max(up, std::max(down, std::max(left, right))));
+
+  float r = right;
+  if (out_dir) *out_dir = EDir::Right;
+  if (left > r)
+  {
+    r = left;
+    if (out_dir) *out_dir = EDir::Left;
+  }
+  if (down > r)
+  {
+    r = down;
+    if (out_dir) *out_dir = EDir::Down;
+  }
+  if (up > r)
+  {
+    r = up;
+    if (out_dir) *out_dir = EDir::Up;
+  }
+
+  return r;
+}
+
+static float CalculateUtilityPolicy(float u[NUM_COLUMNS][NUM_ROWS], Pos cur, EDir dir)
+{
+  // Define utility using Bellman equation
+  Pos posForward = GetMove(cur, dir);
+  Pos posDeviateLeft = GetMove(cur, DeviateLeft(dir));
+  Pos posDeviateRight = GetMove(cur, DeviateRight(dir));
+
+  float utility = CHANCE_FORWARD * u[posForward.x][posForward.y] + CHANCE_DEVIATE_LEFT * u[posDeviateLeft.x][posDeviateLeft.y] + CHANCE_DEVIATE_RIGHT * u[posDeviateRight.x][posDeviateRight.y];
+
+  return utility;
+}
+
+// Evaluate the utilities for the given policy
+static void EvaluatePolicy(EDir policy[NUM_COLUMNS][NUM_ROWS], float utilities[NUM_COLUMNS][NUM_ROWS])
+{
+  for (int i = 0; i < NUM_ROWS; i++)
+  {
+    for (int j = 0; j < NUM_COLUMNS; j++)
+    {
+      if (s_state[j][i] && !s_terminal[j][i])
+      {
+        // Do Bellman update
+        utilities[j][i] = CalculateUtilityPolicy(utilities, Pos{ j, i }, policy[j][i]);
+      }
+    }
+  }
+}
+
+static void PolicyIteration()
+{
+  float u[NUM_COLUMNS][NUM_ROWS] = {};
+  EDir pi[NUM_COLUMNS][NUM_ROWS] = {};
+  const float gamma = 1.0f;
+  int iterations = 0;
+
+  u[3][0] = 1.0f;
+  u[3][1] = -1.0f;
+
+  // Randomize policy vector
+  for (int i = 0; i < NUM_ROWS; i++)
+  {
+    for (int j = 0; j < NUM_COLUMNS; j++)
+    {
+      if (s_state[j][i] && !s_terminal[j][i])
+      switch (next() % 4)
+      {
+      case 0:
+        pi[j][i] = EDir::Up;
+        break;
+      case 1:
+        pi[j][i] = EDir::Down;
+        break;
+      case 2:
+        pi[j][i] = EDir::Left;
+        break;
+      case 3:
+        pi[j][i] = EDir::Right;
+        break;
+      default:
+        break;
+      }
+    }
+  }
+
+  bool changed;
+  do
+  {
+    ++iterations;
+    EvaluatePolicy(pi, u); // Evaluate utilities using current policy
+    changed = false;
+
+    for (int i = 0; i < NUM_ROWS; i++)
+    {
+      for (int j = 0; j < NUM_COLUMNS; j++)
+      {
+        if (s_state[j][i] && !s_terminal[j][i])
+        {
+          EDir dir = EDir::Up;
+          float utility = s_rewards[j][i] + gamma * CalculateUtility(u, Pos{ j, i }, &dir);
+          if (utility > u[j][i])
+          {
+            pi[j][i] = dir;
+            changed = true;
+          }
+        }
+      }
+    }
+  } while (changed);
+
+  printf("%d iterations\n", iterations);
+
+  // pi is now the optimal policy
+  memcpy(s_policy, pi, sizeof(s_policy));
+  memcpy(s_utilities, u, sizeof(s_utilities));
 }
 
 static void ValueIteration()
@@ -184,12 +333,15 @@ static void ValueIteration()
   float u_prime[NUM_COLUMNS][NUM_ROWS] = {};
   const float gamma                    = 1.0f;
   const float error                    = 0.001f;
+  EDir pi[NUM_COLUMNS][NUM_ROWS] = {};
+  int iterations = 0;
 
   u_prime[3][0] = 1.0f;
   u_prime[3][1] = -1.0f;
 
   do
   {
+    ++iterations;
     memcpy(u, u_prime, sizeof(u));
     delta = 0.0f;
     for (int i = 0; i < NUM_ROWS; i++)
@@ -199,7 +351,9 @@ static void ValueIteration()
         if (s_state[j][i] && !s_terminal[j][i])
         {
           // Do Bellman update
-          u_prime[j][i] = s_rewards[j][i] + gamma * CalculateUtility(u, Pos{j, i});
+          EDir dir;
+          u_prime[j][i] = s_rewards[j][i] + gamma * CalculateUtility(u, Pos{j, i}, &dir);
+          pi[j][i] = dir;
 
           // Select max
           float abs = std::abs(u_prime[j][i] - u[j][i]);
@@ -212,6 +366,9 @@ static void ValueIteration()
     }
   } while (delta > 0.0f && delta >= error * (1.0f - gamma) / gamma);
 
+  printf("%d iterations\n", iterations);
+
+  memcpy(s_policy, pi, sizeof(s_policy));
   memcpy(s_utilities, u, sizeof(u));
 }
 
@@ -283,12 +440,23 @@ void DecisionProcessWindowInit()
   ptr[0]        = nextgen();
   ptr[1]        = nextgen();
 
-  ValueIteration();
+  //ValueIteration();
+  //PolicyIteration();
 }
 
 void DecisionProcessWindow(bool* show)
 {
   ImGui::Begin("DecisionProcess", show);
+
+  if (ImGui::Button("Value Iteration"))
+  {
+    ValueIteration();
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Policy Iteration"))
+  {
+    PolicyIteration();
+  }
 
   static int overlay;
   ImGui::RadioButton("Rewards", &overlay, 0);
@@ -302,19 +470,19 @@ void DecisionProcessWindow(bool* show)
     ImGui::NextColumn();
     for (int j = 0; j < NUM_COLUMNS; j++)
     {
-      if (overlay == 0)
+      if (overlay == 0 && s_state[j][i])
       {
         char buf[20];
         sprintf(buf, "%.2f", s_rewards[j][i]);
         ImGui::Text(buf);
       }
-      else if (overlay == 1)
+      else if (overlay == 1 && s_state[j][i])
       {
         char buf[20];
         sprintf(buf, "%.3f", s_utilities[j][i]);
         ImGui::Text(buf);
       }
-      else if (overlay == 2)
+      else if (overlay == 2 && s_state[j][i] && !s_terminal[j][i])
       {
         ImGui::Text(GetDirText(s_policy[j][i]));
       }
@@ -323,7 +491,7 @@ void DecisionProcessWindow(bool* show)
       {
         ImGui::Text(ICON_KI_FIGURE);
       }
-      else if (i == 1 && j == 1)
+      else if (!s_state[j][i])
       {
         ImGui::Text("<wall>");
       }
