@@ -4,9 +4,9 @@
 #include "ConnectFour.h"
 #include "DecisionProcessWindow.h"
 
-static bool s_TicTacToeWindow;
+static bool s_TicTacToeWindow = true;
 static bool s_ConnectFourWindow;
-static bool s_DecisionProcessWindow = true;
+static bool s_DecisionProcessWindow;
 
 void MenuInit()
 {

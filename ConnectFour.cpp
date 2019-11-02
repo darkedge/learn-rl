@@ -69,24 +69,13 @@ void ConnectFourWindow(bool* show)
 {
   ImGui::Begin("ConnectFour", show);
   ImDrawList* draw_list = ImGui::GetWindowDrawList();
-  if (ImGui::Button("2 player"))
-  {
-    memset(s_PlayingField, 0, sizeof(s_PlayingField));
-    s_CurrentPlayer = Disc::Yellow;
-  }
 
-  ImGui::SameLine();
-  if (ImGui::Button("1p (yellow)"))
+  if (ImGui::Button("Reset"))
   {
     memset(s_PlayingField, 0, sizeof(s_PlayingField));
   }
-
   ImGui::SameLine();
-  if (ImGui::Button("1p (red)"))
-  {
-    memset(s_PlayingField, 0, sizeof(s_PlayingField));
-	  // TODO
-  }
+  ImGui::Text(s_CurrentPlayer == Disc::Red ? "Red to move" : "Yellow to move");
 
   const float radius = 28.0f;
   ImVec2 p           = ImGui::GetCursorScreenPos();

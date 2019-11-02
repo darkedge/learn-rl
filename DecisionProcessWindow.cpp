@@ -62,9 +62,15 @@ static constexpr auto NUM_ROWS              = 3;
 static constexpr float CHANCE_FORWARD       = 0.8f;
 static constexpr float CHANCE_DEVIATE_LEFT  = 0.1f;
 static constexpr float CHANCE_DEVIATE_RIGHT = 0.1f;
-static constexpr auto MAX_LOOP = 10000;
+static constexpr auto MAX_LOOP              = 10000;
 
 static const float s_rewards[NUM_COLUMNS][NUM_ROWS] = {
+    {-0.04f, -0.04f, -0.04f},
+    {-0.04f, 0.0f, -0.04f},
+    {-0.04f, -0.04f, -0.04f},
+    {1.0f, -1.0f, -0.04f}};
+
+static float s_adpRewards[NUM_COLUMNS][NUM_ROWS] = {
     {-0.04f, -0.04f, -0.04f},
     {-0.04f, 0.0f, -0.04f},
     {-0.04f, -0.04f, -0.04f},
@@ -108,7 +114,7 @@ enum class EDir
 };
 
 static EDir s_policy[NUM_COLUMNS][NUM_ROWS];
-static Pos s_currentPos = { 0, 2 };
+static Pos s_currentPos = {0, 2};
 
 static EDir DeviateLeft(EDir dir)
 {
@@ -241,8 +247,8 @@ static float CalculateUtility(const float u[NUM_COLUMNS][NUM_ROWS], Pos cur, EDi
 static float CalculateUtilityPolicy(float u[NUM_COLUMNS][NUM_ROWS], Pos cur, EDir dir)
 {
   // Define utility using Bellman equation
-  Pos posForward = GetMove(cur, dir);
-  Pos posDeviateLeft = GetMove(cur, DeviateLeft(dir));
+  Pos posForward      = GetMove(cur, dir);
+  Pos posDeviateLeft  = GetMove(cur, DeviateLeft(dir));
   Pos posDeviateRight = GetMove(cur, DeviateRight(dir));
 
   float utility = CHANCE_FORWARD * u[posForward.x][posForward.y] + CHANCE_DEVIATE_LEFT * u[posDeviateLeft.x][posDeviateLeft.y] + CHANCE_DEVIATE_RIGHT * u[posDeviateRight.x][posDeviateRight.y];
@@ -260,7 +266,7 @@ static void EvaluatePolicy(EDir policy[NUM_COLUMNS][NUM_ROWS], float utilities[N
       if (s_state[j][i] && !s_terminal[j][i])
       {
         // Do Bellman update
-        utilities[j][i] = CalculateUtilityPolicy(utilities, Pos{ j, i }, policy[j][i]);
+        utilities[j][i] = CalculateUtilityPolicy(utilities, Pos{j, i}, policy[j][i]);
       }
     }
   }
@@ -298,8 +304,8 @@ static void RandomizePolicy()
 static void PolicyIteration()
 {
   float u[NUM_COLUMNS][NUM_ROWS] = {};
-  const float gamma = 1.0f;
-  int iterations = 0;
+  const float gamma              = 1.0f;
+  int iterations                 = 0;
 
   u[3][0] = 1.0f;
   u[3][1] = -1.0f;
@@ -319,12 +325,12 @@ static void PolicyIteration()
       {
         if (s_state[j][i] && !s_terminal[j][i])
         {
-          EDir dir = EDir::Up;
-          float utility = s_rewards[j][i] + gamma * CalculateUtility(u, Pos{ j, i }, &dir);
+          EDir dir      = EDir::Up;
+          float utility = s_rewards[j][i] + gamma * CalculateUtility(u, Pos{j, i}, &dir);
           if (utility > u[j][i])
           {
             s_policy[j][i] = dir;
-            changed = true;
+            changed        = true;
           }
         }
       }
@@ -344,8 +350,8 @@ static void ValueIteration()
   float u_prime[NUM_COLUMNS][NUM_ROWS] = {};
   const float gamma                    = 1.0f;
   const float error                    = 0.001f;
-  EDir pi[NUM_COLUMNS][NUM_ROWS] = {};
-  int iterations = 0;
+  EDir pi[NUM_COLUMNS][NUM_ROWS]       = {};
+  int iterations                       = 0;
 
   u_prime[3][0] = 1.0f;
   u_prime[3][1] = -1.0f;
@@ -364,7 +370,7 @@ static void ValueIteration()
           // Do Bellman update
           EDir dir;
           u_prime[j][i] = s_rewards[j][i] + gamma * CalculateUtility(u, Pos{j, i}, &dir);
-          pi[j][i] = dir;
+          pi[j][i]      = dir;
 
           // Select max
           float abs = std::abs(u_prime[j][i] - u[j][i]);
@@ -435,7 +441,7 @@ static Pos TryMove(Pos current, EDir dir)
 static void ResetAgent()
 {
   s_sumOfRewards = 0;
-  s_currentPos = { 0, 2 };
+  s_currentPos   = {0, 2};
 }
 
 static void StepTrial()
@@ -446,8 +452,8 @@ static void StepTrial()
 // With a given policy, do a trial run
 static void DoTrial()
 {
-  s_currentPos = { 0, 2 };
-  int loop = 0;
+  s_currentPos = {0, 2};
+  int loop     = 0;
   while (++loop < MAX_LOOP && !((s_currentPos.x == 3 && s_currentPos.y == 0) || (s_currentPos.x == 3 && s_currentPos.y == 1)))
   {
     StepTrial();
@@ -457,7 +463,7 @@ static void DoTrial()
 
 static void DirectUtilityEstimation()
 {
-  s_currentPos = { 0, 2 };
+  s_currentPos = {0, 2};
 
   std::vector<Pos> nodes;
   nodes.push_back(s_currentPos);
@@ -476,7 +482,7 @@ static void DirectUtilityEstimation()
     for (int i = 0; i < nodes.size(); i++)
     {
       const auto& n = nodes[i];
-      float sample = s_rewards[n.x][n.y];
+      float sample  = s_rewards[n.x][n.y];
       for (int j = i + 1; j < nodes.size(); j++)
       {
         const auto& o = nodes[j];
@@ -491,6 +497,56 @@ static void DirectUtilityEstimation()
 static void ResetEstimation()
 {
   memset(s_utilityAverage, 0, sizeof(s_utilityAverage));
+}
+
+// Passive Adaptive Dynamic Programming
+static int s_stateActionTuples[NUM_COLUMNS][NUM_ROWS][4];
+static int s_stateActionStateTuples[NUM_COLUMNS][NUM_ROWS][4][NUM_COLUMNS][NUM_ROWS]; // Oh fuck
+static float s_transitionProbabilities[NUM_COLUMNS][NUM_ROWS][4][NUM_COLUMNS][NUM_ROWS]; // Oh fuck
+static const Pos* s_previousState;
+static EDir s_previousAction; // = EDir::Null;
+
+static EDir PassiveAdpAgent(const Pos* currentState, float rewardSignal)
+{
+  if (true) // s prime is new
+  {
+    s_utilities[currentState->x][currentState->y]  = rewardSignal;
+    s_adpRewards[currentState->x][currentState->y] = rewardSignal;
+  }
+
+  if (s_previousState)
+  {
+    int& n_sa = s_stateActionTuples[s_previousState->x][s_previousState->y][(int)s_previousAction];
+    auto& n_sas = s_stateActionStateTuples[s_previousState->x][s_previousState->y][(int)s_previousAction];
+      n_sa++;
+      n_sas[currentState->x][currentState->y]++;
+    for (int i = 0; i < NUM_ROWS; i++)
+    {
+      for (int j = 0; j < NUM_COLUMNS; j++)
+      {
+        int freq = n_sas[j][i];
+        if (freq != 0)
+        {
+          s_transitionProbabilities[s_previousState->x][s_previousState->y][(int)s_previousAction][j][i] = (float)freq / (float)n_sa;
+        }
+      }
+    }
+  }
+
+  EvaluatePolicy(s_policy, s_utilities); // Evaluate utilities using current policy
+
+  if (s_terminal[currentState->x][currentState->y])
+  {
+    s_previousState = nullptr;
+    //s_previousAction = EDir::Null;
+  }
+  else
+  {
+    s_previousState  = currentState;
+    s_previousAction = s_policy[currentState->x][currentState->y];
+  }
+
+  return s_previousAction;
 }
 
 void DecisionProcessWindowInit()
@@ -555,6 +611,11 @@ void DecisionProcessWindow(bool* show)
   if (ImGui::Button("Reset Estimation"))
   {
     ResetEstimation();
+  }
+
+  if (ImGui::Button("PassiveAdpAgent"))
+  {
+    PassiveAdpAgent(&s_currentPos, s_rewards[s_currentPos.x][s_currentPos.y]);
   }
 
   static int overlay = 2;
