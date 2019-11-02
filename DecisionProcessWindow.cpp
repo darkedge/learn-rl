@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <ctime>
 #include "IconsKenney.h"
+#include <vector>
 
 // RNG
 
@@ -61,6 +62,7 @@ static constexpr auto NUM_ROWS              = 3;
 static constexpr float CHANCE_FORWARD       = 0.8f;
 static constexpr float CHANCE_DEVIATE_LEFT  = 0.1f;
 static constexpr float CHANCE_DEVIATE_RIGHT = 0.1f;
+static constexpr auto MAX_LOOP = 10000;
 
 static const float s_rewards[NUM_COLUMNS][NUM_ROWS] = {
     {-0.04f, -0.04f, -0.04f},
@@ -80,7 +82,14 @@ static bool s_terminal[NUM_COLUMNS][NUM_ROWS] = {
     {false, false, false},
     {true, true, false}};
 
+struct UtilityAverage
+{
+  float sumOfSamples;
+  int numSamples;
+};
+
 static float s_utilities[NUM_COLUMNS][NUM_ROWS];
+static UtilityAverage s_utilityAverage[NUM_COLUMNS][NUM_ROWS];
 
 static float s_sumOfRewards;
 
@@ -99,6 +108,7 @@ enum class EDir
 };
 
 static EDir s_policy[NUM_COLUMNS][NUM_ROWS];
+static Pos s_currentPos = { 0, 2 };
 
 static EDir DeviateLeft(EDir dir)
 {
@@ -195,8 +205,6 @@ static Pos GetMove(Pos pos, EDir dir)
 static float CalculateUtility(const float u[NUM_COLUMNS][NUM_ROWS], Pos cur, EDir* out_dir = nullptr)
 {
   // Define utility using Bellman equation
-  float max  = -FLT_MAX;
-
   Pos posUp    = GetMove(cur, EDir::Up);
   Pos posDown  = GetMove(cur, EDir::Down);
   Pos posLeft  = GetMove(cur, EDir::Left);
@@ -258,47 +266,51 @@ static void EvaluatePolicy(EDir policy[NUM_COLUMNS][NUM_ROWS], float utilities[N
   }
 }
 
+// Randomize policy vector
+static void RandomizePolicy()
+{
+  for (int i = 0; i < NUM_ROWS; i++)
+  {
+    for (int j = 0; j < NUM_COLUMNS; j++)
+    {
+      if (s_state[j][i] && !s_terminal[j][i])
+        switch (next() % 4)
+        {
+        case 0:
+          s_policy[j][i] = EDir::Up;
+          break;
+        case 1:
+          s_policy[j][i] = EDir::Down;
+          break;
+        case 2:
+          s_policy[j][i] = EDir::Left;
+          break;
+        case 3:
+          s_policy[j][i] = EDir::Right;
+          break;
+        default:
+          break;
+        }
+    }
+  }
+}
+
 static void PolicyIteration()
 {
   float u[NUM_COLUMNS][NUM_ROWS] = {};
-  EDir pi[NUM_COLUMNS][NUM_ROWS] = {};
   const float gamma = 1.0f;
   int iterations = 0;
 
   u[3][0] = 1.0f;
   u[3][1] = -1.0f;
 
-  // Randomize policy vector
-  for (int i = 0; i < NUM_ROWS; i++)
-  {
-    for (int j = 0; j < NUM_COLUMNS; j++)
-    {
-      if (s_state[j][i] && !s_terminal[j][i])
-      switch (next() % 4)
-      {
-      case 0:
-        pi[j][i] = EDir::Up;
-        break;
-      case 1:
-        pi[j][i] = EDir::Down;
-        break;
-      case 2:
-        pi[j][i] = EDir::Left;
-        break;
-      case 3:
-        pi[j][i] = EDir::Right;
-        break;
-      default:
-        break;
-      }
-    }
-  }
+  RandomizePolicy();
 
   bool changed;
   do
   {
     ++iterations;
-    EvaluatePolicy(pi, u); // Evaluate utilities using current policy
+    EvaluatePolicy(s_policy, u); // Evaluate utilities using current policy
     changed = false;
 
     for (int i = 0; i < NUM_ROWS; i++)
@@ -311,7 +323,7 @@ static void PolicyIteration()
           float utility = s_rewards[j][i] + gamma * CalculateUtility(u, Pos{ j, i }, &dir);
           if (utility > u[j][i])
           {
-            pi[j][i] = dir;
+            s_policy[j][i] = dir;
             changed = true;
           }
         }
@@ -322,7 +334,6 @@ static void PolicyIteration()
   printf("%d iterations\n", iterations);
 
   // pi is now the optimal policy
-  memcpy(s_policy, pi, sizeof(s_policy));
   memcpy(s_utilities, u, sizeof(s_utilities));
 }
 
@@ -421,12 +432,71 @@ static Pos TryMove(Pos current, EDir dir)
   return newPos;
 }
 
-static Pos s_currentPos = {0, 2};
+static void ResetAgent()
+{
+  s_sumOfRewards = 0;
+  s_currentPos = { 0, 2 };
+}
+
+static void StepTrial()
+{
+  s_currentPos = TryMove(s_currentPos, s_policy[s_currentPos.x][s_currentPos.y]);
+}
+
+// With a given policy, do a trial run
+static void DoTrial()
+{
+  s_currentPos = { 0, 2 };
+  int loop = 0;
+  while (++loop < MAX_LOOP && !((s_currentPos.x == 3 && s_currentPos.y == 0) || (s_currentPos.x == 3 && s_currentPos.y == 1)))
+  {
+    StepTrial();
+  }
+  printf("%d iterations\n", loop);
+}
+
+static void DirectUtilityEstimation()
+{
+  s_currentPos = { 0, 2 };
+
+  std::vector<Pos> nodes;
+  nodes.push_back(s_currentPos);
+
+  int loop = 0;
+  while (++loop < MAX_LOOP && !((s_currentPos.x == 3 && s_currentPos.y == 0) || (s_currentPos.x == 3 && s_currentPos.y == 1)))
+  {
+    StepTrial();
+    nodes.push_back(s_currentPos);
+  }
+  printf("%d iterations\n", loop);
+
+  if (loop <= MAX_LOOP)
+  {
+    // Create utility sample
+    for (int i = 0; i < nodes.size(); i++)
+    {
+      const auto& n = nodes[i];
+      float sample = s_rewards[n.x][n.y];
+      for (int j = i + 1; j < nodes.size(); j++)
+      {
+        const auto& o = nodes[j];
+        sample += s_rewards[o.x][o.y];
+      }
+      s_utilityAverage[n.x][n.y].sumOfSamples += sample;
+      s_utilityAverage[n.x][n.y].numSamples++;
+    }
+  }
+}
+
+static void ResetEstimation()
+{
+  memset(s_utilityAverage, 0, sizeof(s_utilityAverage));
+}
 
 void DecisionProcessWindowInit()
 {
   // Init RNG using splitmix64
-  std::srand(std::time(nullptr)); // use current time as seed for random generator
+  std::srand((unsigned int)std::time(nullptr)); // use current time as seed for random generator
   uint64_t seed = ((uint64_t)std::rand() << 32) | std::rand();
 
   auto nextgen = [&]() {
@@ -439,9 +509,6 @@ void DecisionProcessWindowInit()
   uint64_t* ptr = (uint64_t*)s;
   ptr[0]        = nextgen();
   ptr[1]        = nextgen();
-
-  //ValueIteration();
-  //PolicyIteration();
 }
 
 void DecisionProcessWindow(bool* show)
@@ -457,11 +524,44 @@ void DecisionProcessWindow(bool* show)
   {
     PolicyIteration();
   }
+  ImGui::SameLine();
+  if (ImGui::Button("Randomize Policy"))
+  {
+    RandomizePolicy();
+  }
 
-  static int overlay;
+  if (ImGui::Button("Do Trial"))
+  {
+    ResetAgent();
+    DoTrial();
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Step Trial"))
+  {
+    StepTrial();
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Reset Agent"))
+  {
+    ResetAgent();
+  }
+
+  if (ImGui::Button("Direct Utility Estimation"))
+  {
+    ResetAgent();
+    DirectUtilityEstimation();
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Reset Estimation"))
+  {
+    ResetEstimation();
+  }
+
+  static int overlay = 2;
   ImGui::RadioButton("Rewards", &overlay, 0);
   ImGui::RadioButton("Utility", &overlay, 1);
   ImGui::RadioButton("Policy", &overlay, 2);
+  ImGui::RadioButton("Estimation", &overlay, 3);
 
   ImGui::Columns(5);
   for (int i = 0; i < NUM_ROWS; i++)
@@ -472,19 +572,20 @@ void DecisionProcessWindow(bool* show)
     {
       if (overlay == 0 && s_state[j][i])
       {
-        char buf[20];
-        sprintf(buf, "%.2f", s_rewards[j][i]);
-        ImGui::Text(buf);
+        ImGui::Text("%.2f", s_rewards[j][i]);
       }
       else if (overlay == 1 && s_state[j][i])
       {
-        char buf[20];
-        sprintf(buf, "%.3f", s_utilities[j][i]);
-        ImGui::Text(buf);
+        ImGui::Text("%.3f", s_utilities[j][i]);
       }
       else if (overlay == 2 && s_state[j][i] && !s_terminal[j][i])
       {
         ImGui::Text(GetDirText(s_policy[j][i]));
+      }
+      else if (overlay == 3 && s_state[j][i] && !s_terminal[j][i])
+      {
+        ImGui::Text("%.3f", s_utilityAverage[j][i].numSamples == 0 ? 0.0f : s_utilityAverage[j][i].sumOfSamples / s_utilityAverage[j][i].numSamples);
+        ImGui::Text("%d samples", s_utilityAverage[j][i].numSamples);
       }
 
       if (s_currentPos.x == j && s_currentPos.y == i)
@@ -532,7 +633,7 @@ void DecisionProcessWindow(bool* show)
     s_currentPos = TryMove(s_currentPos, EDir::Right);
   }
 
-  ImGui::InputFloat("Roll", &s_roll);
+  ImGui::InputFloat("Last RNG Roll", &s_roll);
   ImGui::InputFloat("Total reward", &s_sumOfRewards);
 
   ImGui::End();
