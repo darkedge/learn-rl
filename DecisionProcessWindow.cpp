@@ -1,59 +1,9 @@
 #include "imgui.h"
+#include "Random.h"
+#include "IconsKenney.h"
 #include <stdint.h>
 #include <algorithm>
-#include <ctime>
-#include "IconsKenney.h"
 #include <vector>
-
-// RNG
-
-static inline uint32_t rotl(const uint32_t x, int k)
-{
-  return (x << k) | (x >> (32 - k));
-}
-
-// state
-static uint32_t s[4];
-
-static uint32_t next(void)
-{
-  const uint32_t result = s[0] + s[3];
-
-  const uint32_t t = s[1] << 9;
-
-  s[2] ^= s[0];
-  s[3] ^= s[1];
-  s[1] ^= s[2];
-  s[0] ^= s[3];
-
-  s[2] ^= t;
-
-  s[3] = rotl(s[3], 11);
-
-  return result;
-}
-
-static inline double to_double(uint64_t x)
-{
-  union {
-    uint64_t i;
-    double d;
-  } u;
-
-  u.i = UINT64_C(0x3FF) << 52 | x >> 12;
-  return u.d - 1.0;
-}
-
-static inline float to_float(uint32_t x)
-{
-  union {
-    uint32_t i;
-    float d;
-  } u;
-
-  u.i = UINT32_C(0x7F) << 23 | x >> 9;
-  return u.d - 1.0f;
-}
 
 // Game
 
@@ -280,7 +230,7 @@ static void RandomizePolicy()
     for (int j = 0; j < NUM_COLUMNS; j++)
     {
       if (s_state[j][i] && !s_terminal[j][i])
-        switch (next() % 4)
+        switch (rng::Int() % 4)
         {
         case 0:
           s_policy[j][i] = EDir::Up;
@@ -392,7 +342,7 @@ static void ValueIteration()
 static Pos TryMove(Pos current, EDir dir)
 {
   Pos d;
-  s_roll           = to_float(next());
+  s_roll           = rng::Float();
   bool deviate     = (s_roll > CHANCE_FORWARD);
   bool deviateLeft = (s_roll > CHANCE_FORWARD + CHANCE_DEVIATE_LEFT);
   switch (dir)
@@ -501,7 +451,7 @@ static void ResetEstimation()
 
 // Passive Adaptive Dynamic Programming
 static int s_stateActionTuples[NUM_COLUMNS][NUM_ROWS][4];
-static int s_stateActionStateTuples[NUM_COLUMNS][NUM_ROWS][4][NUM_COLUMNS][NUM_ROWS]; // Oh fuck
+static int s_stateActionStateTuples[NUM_COLUMNS][NUM_ROWS][4][NUM_COLUMNS][NUM_ROWS];    // Oh fuck
 static float s_transitionProbabilities[NUM_COLUMNS][NUM_ROWS][4][NUM_COLUMNS][NUM_ROWS]; // Oh fuck
 static const Pos* s_previousState;
 static EDir s_previousAction; // = EDir::Null;
@@ -516,10 +466,10 @@ static EDir PassiveAdpAgent(const Pos* currentState, float rewardSignal)
 
   if (s_previousState)
   {
-    int& n_sa = s_stateActionTuples[s_previousState->x][s_previousState->y][(int)s_previousAction];
+    int& n_sa   = s_stateActionTuples[s_previousState->x][s_previousState->y][(int)s_previousAction];
     auto& n_sas = s_stateActionStateTuples[s_previousState->x][s_previousState->y][(int)s_previousAction];
-      n_sa++;
-      n_sas[currentState->x][currentState->y]++;
+    n_sa++;
+    n_sas[currentState->x][currentState->y]++;
     for (int i = 0; i < NUM_ROWS; i++)
     {
       for (int j = 0; j < NUM_COLUMNS; j++)
@@ -551,20 +501,7 @@ static EDir PassiveAdpAgent(const Pos* currentState, float rewardSignal)
 
 void DecisionProcessWindowInit()
 {
-  // Init RNG using splitmix64
-  std::srand((unsigned int)std::time(nullptr)); // use current time as seed for random generator
-  uint64_t seed = ((uint64_t)std::rand() << 32) | std::rand();
-
-  auto nextgen = [&]() {
-    uint64_t z = (seed += 0x9e3779b97f4a7c15);
-    z          = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
-    z          = (z ^ (z >> 27)) * 0x94d049bb133111eb;
-    return z ^ (z >> 31);
-  };
-
-  uint64_t* ptr = (uint64_t*)s;
-  ptr[0]        = nextgen();
-  ptr[1]        = nextgen();
+  
 }
 
 void DecisionProcessWindow(bool* show)

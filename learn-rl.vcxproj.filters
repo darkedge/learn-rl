@@ -27,6 +27,7 @@
     <ClInclude Include="TicTacToeWindow.h" />
     <ClInclude Include="ConnectFour.h" />
     <ClInclude Include="DecisionProcessWindow.h" />
+    <ClInclude Include="Random.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="imgui\imgui.cpp">
@@ -55,6 +56,7 @@
     <ClCompile Include="TicTacToeWindow.cpp" />
     <ClCompile Include="ConnectFour.cpp" />
     <ClCompile Include="DecisionProcessWindow.cpp" />
+    <ClCompile Include="Random.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Imgui">

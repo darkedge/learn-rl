@@ -3,6 +3,7 @@
 #include "TicTacToeWindow.h"
 #include "ConnectFour.h"
 #include "DecisionProcessWindow.h"
+#include "Random.h"
 
 static bool s_TicTacToeWindow = true;
 static bool s_ConnectFourWindow;
@@ -10,6 +11,7 @@ static bool s_DecisionProcessWindow;
 
 void MenuInit()
 {
+  rng::Init();
   TicTacToeWindowInit();
   ConnectFourWindowInit();
   DecisionProcessWindowInit();
